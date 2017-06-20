@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Multiselect</title>
+		<style>
+			body {
+				font: 13px/13px 'Helvetica', 'Arial', sans-serif;
+			}
+			.multiselect {
+				max-width: 400px;
+				height: 100px;
+				overflow: hidden;
+				border: 1px solid rgb(100, 100, 100);
+			}
+			.multiselect__selected-items {
+				float: left;
+				width: 50%;
+				height: 100%;
+				padding: 4px;
+				overflow-y: scroll;
+				box-sizing: border-box;
+			}
+			.multiselect__unselected-items {
+				float: left;
+				width: 50%;
+				height: 100%;
+				padding: 4px;
+				border-right: 1px solid rgb(100, 100, 100);
+				overflow-y: scroll;
+				box-sizing: border-box;
+			}
+			.multiselect__item {
+				padding: 3px 4px;
+				margin: 1px;
+				color: white;
+				background: rgb(50, 100, 200);
+				border-radius: 4px;
+			}
+			.multiselect__item:hover {
+				cursor: pointer;
+				background: rgb(0, 50, 150);
+			}
+		</style>
+	</head>
+	<body>
+		<div data-multiselect-columns>
+			<select multiple required>
+				<option value="a">Amsterdam</option>
+				<option value="b">Den Haag</option>
+				<option value="c">Eindhoven</option>
+				<option value="d" selected>Enschede</option>
+				<option value="e" selected>Groningen</option>
+				<option value="f">Maastricht</option>
+				<option value="g">Rotterdam</option>
+				<option value="h">Utrecht</option>
+			</select>
+		</div>
+
+		<script>
+			if (typeof MultiSelectColumns === 'undefined') {
+
+				var MultiSelectColumns = function() {
+					this.element = null;
+					this.selectElement = null;
+					this.renderedElement = null;
+					this.state = {
+						values: [],
+						selected: [],
+						unselected: []
+					};
+
+					var _this = this;
+
+					this.init = function(elementIdentifier) {
+						this.element = document.querySelector(elementIdentifier);
+						this.selectElement = this.element.querySelector('select');
+
+						// Sets first item values
+						[].forEach.call(this.selectElement.querySelectorAll('option'), function(option) {
+							_this.state[option.selected ? 'selected' : 'unselected']
+								.push({ label: option.innerHTML, value: option.value });
+							if (option.selected) {
+								_this.state.values.push(option.value);
+							}
+						});
+
+						// Forces first render
+						this.render();
+					};
+
+					this.render = function() {
+						if (this.renderedElement) {
+							this.renderedElement.remove();
+						}
+
+						// Hides actual select element
+						_this.selectElement.style.display = 'none';
+
+						// Append multiselect columns element
+						this.element.append((function() {
+							var renderItemElement = function(item, from, to) {
+								var itemElement = document.createElement('div');
+								itemElement.setAttribute('class', 'multiselect__item');
+								itemElement.setAttribute('draggable', 'true');
+								itemElement.setAttribute('data-value', item.value);
+								itemElement.innerHTML = item.label;
+
+								// Adds click event listener to item
+								itemElement.addEventListener('click', function(event) {
+									_moveSelectedItem(item.value, from, to);
+								});
+
+								// Adds dragstart event listener to item
+								itemElement.addEventListener('dragstart', function(event) {
+									event.dataTransfer.setData('text/plain', event.target.dataset.value);
+								});
+								return itemElement;
+							};
+
+							// Adds drag and drop event listeners for target elements
+							var addDragDropEventListeners = function(element, from, to) {
+								element.addEventListener('dragover', function(event) {
+									event.preventDefault();
+									event.dataTransfer.dropEffect = 'move';
+								});
+
+								element.addEventListener('drop', function(event) {
+									event.preventDefault();
+									var value = event.dataTransfer.getData('text');
+
+									if (_this.state[from].filter(function(item) {
+										return item.value === value;
+									})) {
+										_moveSelectedItem(value, from, to);
+									};
+								});
+							};
+
+							_this.renderedElement = document.createElement('div');
+							_this.renderedElement.setAttribute('class', 'multiselect');
+
+							// Renders unselected items column
+							_this.renderedElement.append((function() {
+								var unselectedItemsElement = document.createElement('div');
+								unselectedItemsElement.setAttribute('class', 'multiselect__unselected-items');
+
+								// Adds drag and drop event listeners for moving from selected to unselected
+								addDragDropEventListeners(unselectedItemsElement, 'selected', 'unselected');
+
+								// Renders unselected items
+								if (_this.state.unselected.length) {
+									_this.state.unselected.forEach(function(item) {
+										unselectedItemsElement.append(renderItemElement(item, 'unselected', 'selected'));
+									});
+								}
+								return unselectedItemsElement;
+							})());
+
+							// Renders selected items column
+							_this.renderedElement.append((function() {
+								var selectedItemsElement = document.createElement('div');
+								selectedItemsElement.setAttribute('class', 'multiselect__selected-items');
+
+								// Adds drag and drop event listeners for moving from unselected to selected
+								addDragDropEventListeners(selectedItemsElement, 'unselected', 'selected');
+
+								// Renders selected items
+								if (_this.state.selected.length) {
+									_this.state.values = _this.state.selected.map(function(item) {
+										selectedItemsElement.append(renderItemElement(item, 'selected', 'unselected'));
+										return item.value;
+									});
+								}
+								return selectedItemsElement;
+							})());
+
+							// Returns final element to be appended to existing DOM
+							return _this.renderedElement;
+						})());
+
+						// Updates actual select element selected options
+						[].forEach.call(this.selectElement.querySelectorAll('option'), function(option) {
+							option.setAttribute('selected', '');
+							if (_this.state.values.indexOf(option.value) === -1) {
+								option.removeAttribute('selected');
+							}
+						});
+					};
+
+					function _moveSelectedItem(value, from, to) {
+						var removeItem = function(item) {
+							return item.value !== value;
+						};
+
+						_this.state[from] = _this.state[from].filter(function(item) {
+							if (item.value === value) {
+								_this.state[to] = _this.state[to].filter(removeItem);
+								_this.state[to].push(item);
+
+								// Removes from values if applicable
+								if (from === 'selected') {
+									_this.state.values = _this.state.values.filter(function(selectedValue) {
+										return selectedValue !== item.value;
+									});
+								}
+
+								// Adds to values if applicable
+								if (from === 'unselected' && _this.state.values.indexOf(item.value) === -1) {
+									_this.state.values = _this.state.values.push(item.value);
+								}
+							}
+							return item.value !== value;
+						});
+
+						// Forces (re-)render
+						_this.render();
+					}
+				};
+			}
+
+			var multiSelectColumns = new MultiSelectColumns();
+			multiSelectColumns.init('[data-multiselect-columns]', {});
+		</script>
+	</body>
+</html>
